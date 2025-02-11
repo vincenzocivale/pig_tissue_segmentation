@@ -4,6 +4,7 @@ import ipywidgets as widgets
 from IPython.display import display
 from PIL import Image
 
+
 # Funzione per caricare l'immagine
 def load_image(image_path):
     img = Image.open(image_path).convert('L')  # Convertiamo in scala di grigi

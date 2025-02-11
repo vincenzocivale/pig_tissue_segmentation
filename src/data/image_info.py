@@ -1,91 +1,82 @@
+import cv2
 import os
-from shutil import copyfile
+
+import src.data.pre_process_image as pi
+import src.data.segmentation as seg
+import src.data.post_process_image as post
+
+class ImageSlice:
+    """
+    Class to manage a slice consisting of 3 images:
+      - wga: WGA fluorescence image (which can highlight the overall tissue)
+      - collagen: collagen image
+      - autofluorescence: autofluorescence image
+    """
+    def __init__(self, slice_id, path_wga, path_collagen, path_autofluorescence, output_folder=r"C:\Users\cical\Documents\GitHub\Repositories\pig_tissue_segmentation\data\processed"):
+        self.slice_id = slice_id
+        self.path_wga = path_wga
+        self.path_collagen = path_collagen
+        self.path_autofluorescence = path_autofluorescence
+        self.output_folder = output_folder
+        
+        self.preprocessed_wga = None
+        self.preprocessed_collagen = None
+        self.preprocessed_auto = None
+
+        self.segmented_tissue = None
+        self.segmented_cardios = None
+        self.segmented_collagen = None
+
+        self.tissue_contours = None
+        self.cardios_contours = None
+        self.collagen_contours = None
 
 
-class ImageInfo:
-    def __init__(self, path, fluorescence_image=None, collagen_image=None, cellular_image=None, segmented_overall=None, segmented_cellular=None, segmented_collagen=None):
-        self.path = path
-        self.fluorescence_image = fluorescence_image
-        self.collagen_image = collagen_image
-        self.cellular_image = cellular_image
-        self.segmented_overall = segmented_overall
-        self.segmented_cellular = segmented_cellular
-        self.segmented_collagen = segmented_collagen
-    
-    def set_fluorescence_image(self, fluorescence_image):
-        self.fluorescence_image = fluorescence_image
+    def _preprocess(self, ):
+        """
+        Applies pre-processing (denoising, CLAHE, and erosion) to each image.
+        """
+        self.preprocessed_wga = pi.enhance_image(self.path_wga)
+        self.preprocessed_collagen = pi.enhance_image(self.path_collagen)
+        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence)
 
-    def set_collagen_image(self, collagen_image):
-        self.collagen_image = collagen_image
+    def _segment_image(self):
 
-    def set_cellular_image(self, cellular_image):
-        self.cellular_image = cellular_image
+        self.segmented_tissue = seg.adaptive_thresholding(self.preprocessed_wga)
 
-    def set_segmented_overall(self, segmented_overall):
-        self.segmented_overall = segmented_overall
+        # Apply mask of tissue region to the autofluorescence image
+        auto_processed = pi.apply_mask(self.preprocessed_auto, self.segmented_tissue)
+        self.segmented_cardios = seg.adaptive_thresholding(auto_processed)
+        
+        # Remove from tissue mask the regions that are cardios
+        self.segmented_collagen = pi.apply_mask(auto_processed, cv2.bitwise_not(self.segmented_cardios))
 
-    def set_segmented_cellular(self, segmented_cellular):
-        self.segmented_cellular = segmented_cellular
+    def _postprocess(self):
+        self.tissue_contours = post.extract_external_contours(self.segmented_tissue)
+        self.cardios_contours = post.extract_external_contours(self.segmented_cardios)
+        self.collagen_contours = post.extract_external_contours(self.segmented_collagen)
 
-    def set_segmented_collagen(self, segmented_collagen):
-        self.segmented_collagen = segmented_collagen
+    def _save_results(self):
+        if not os.path.isdir(self.output_folder):
+            raise  FileNotFoundError(f"Error: The folder to save result '{self.output_folder}' does not exist.")
+        
+        slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
+        os.makedirs(slice_folder, exist_ok=True)
 
-    def get_info(self):
-        return {
-            "path": self.path,
-            "fluorescence_image": self.fluorescence_image,
-            "collagen_image": self.collagen_image,
-            "cellular_image": self.cellular_image,
-            "segmented_overall": self.segmented_overall,
-            "segmented_cellular": self.segmented_cellular,
-            "segmented_collagen": self.segmented_collagen
-        }
-    
-    def save_info(self):
-        interim_data_folder_root = "data\\interim"
-        # Create the directory if it doesn't exist
-        if not os.path.exists(interim_data_folder_root):
-            os.makedirs(interim_data_folder_root)
+        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
+        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
+        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)
 
-        # Save each image in the appropriate subfolder
-        if self.fluorescence_image:
-            fluorescence_folder = os.path.join(interim_data_folder_root, "fluorescence")
-            if not os.path.exists(fluorescence_folder):
-                os.makedirs(fluorescence_folder)
-            fluorescence_path = os.path.join(fluorescence_folder, os.path.basename(self.path))
-            copyfile(self.fluorescence_image, fluorescence_path)
+        # # Create an image with contours
+        # wga_image = cv2.imread(self.path_wga, cv2.IMREAD_GRAYSCALE)
+        # img_with_contours = cv2.cvtColor(wga_image, cv2.COLOR_GRAY2BGR)
+        # cv2.drawContours(img_with_contours, self.tissue_contours, -1, (0, 255, 0), 1)  # Green for tissue
+        # cv2.drawContours(img_with_contours, self.cardios_contours, -1, (0, 0, 255), 1)  # Red for cardios
 
-        if self.collagen_image:
-            collagen_folder = os.path.join(interim_data_folder_root, "collagen")
-            if not os.path.exists(collagen_folder):
-                os.makedirs(collagen_folder)
-            collagen_path = os.path.join(collagen_folder, os.path.basename(self.path))
-            copyfile(self.collagen_image, collagen_path)
+        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours.png"), img_with_contours)
 
-        if self.cellular_image:
-            cellular_folder = os.path.join(interim_data_folder_root, "cellular")
-            if not os.path.exists(cellular_folder):
-                os.makedirs(cellular_folder)
-            cellular_path = os.path.join(cellular_folder, os.path.basename(self.path))
-            copyfile(self.cellular_image, cellular_path)
-
-        if self.segmented_overall:
-            segmented_overall_folder = os.path.join(interim_data_folder_root, "segmented_overall")
-            if not os.path.exists(segmented_overall_folder):
-                os.makedirs(segmented_overall_folder)
-            segmented_overall_path = os.path.join(segmented_overall_folder, os.path.basename(self.path))
-            copyfile(self.segmented_overall, segmented_overall_path)
-
-        if self.segmented_cellular:
-            segmented_cellular_folder = os.path.join(interim_data_folder_root, "segmented_cellular")
-            if not os.path.exists(segmented_cellular_folder):
-                os.makedirs(segmented_cellular_folder)
-            segmented_cellular_path = os.path.join(segmented_cellular_folder, os.path.basename(self.path))
-            copyfile(self.segmented_cellular, segmented_cellular_path)
-
-        if self.segmented_collagen:
-            segmented_collagen_folder = os.path.join(interim_data_folder_root, "segmented_collagen")
-            if not os.path.exists(segmented_collagen_folder):
-                os.makedirs(segmented_collagen_folder)
-            segmented_collagen_path = os.path.join(segmented_collagen_folder, os.path.basename(self.path))
-            copyfile(self.segmented_collagen, segmented_collagen_path)
+    def analyse_image(self):
+        self._preprocess()
+        self._segment_image()
+        self._postprocess()
+        self._save_results()
