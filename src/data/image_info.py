@@ -45,7 +45,7 @@ class ImageSlice:
         self.segmented_tissue = seg.adaptive_thresholding(self.preprocessed_wga)
 
         # Apply mask of tissue region to the autofluorescence image
-        auto_processed = pi.apply_mask(self.preprocessed_auto, self.segmented_tissue)
+        #auto_processed = pi.apply_mask(self.preprocessed_auto, self.segmented_tissue)
         self.segmented_cardios = seg.adaptive_thresholding(auto_processed)
         
         # Remove from tissue mask the regions that are cardios
