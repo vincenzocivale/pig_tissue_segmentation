@@ -10,11 +10,8 @@ def extract_external_contours(mask):
 
     Returns:
       - contours: list of detected contours
-      - mask_contours: image with drawn contours
     """
     
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    mask_contours = np.zeros_like(mask)
-
-    return contours, mask_contours
+    return contours
