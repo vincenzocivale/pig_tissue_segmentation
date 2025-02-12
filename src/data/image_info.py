@@ -8,7 +8,7 @@ import src.data.post_process_image as post
 class ImageSlice:
     """
     Class to manage a slice consisting of 3 images:
-      - wga: WGA fluorescence image (which can highlight the overall tissue)
+      - wga: WGA 
       - collagen: collagen image
       - autofluorescence: autofluorescence image
     """
@@ -36,8 +36,8 @@ class ImageSlice:
         """
         Applies pre-processing (denoising, CLAHE, and erosion) to each image.
         """
-        self.preprocessed_wga = pi.enhance_image(self.path_wga)
         self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence)
+        self.preprocessed_wga = self.preprocessed_auto
         self.preprocessed_collagen = self.preprocessed_auto #pi.enhance_autoilluminescence_with_sobel(self.path_collagen)
         
 
@@ -46,7 +46,8 @@ class ImageSlice:
         self.segmented_tissue = seg.watershed_segmentation(self.preprocessed_wga)
 
         # Apply mask of tissue region to the autofluorescence image
-        self.segmented_cardios = seg.watershed_segmentation(self.preprocessed_auto)
+        masked_auto = pi.apply_mask(self.preprocessed_auto, self.segmented_tissue)
+        self.segmented_cardios = seg.watershed_segmentation(masked_auto)
         
         # Remove from tissue mask the regions that are cardios
         self.segmented_collagen = seg.watershed_segmentation(self.preprocessed_collagen)

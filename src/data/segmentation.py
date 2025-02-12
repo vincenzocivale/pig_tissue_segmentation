@@ -30,13 +30,13 @@ def adaptive_thresholding(image, max_value=255, adaptive_method=cv2.ADAPTIVE_THR
     return thresholded
 
 
-def watershed_segmentation_with_markers(image):
+def watershed_segmentation(image):
     # Verifica se l'immagine è in scala di grigi
     if len(image.shape) == 2 or image.shape[2] == 1:
         # Converte l'immagine in BGR
         image_bgr = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     else:
-        image_bgr = image.copy()
+        image_bgr = image
 
     # Conversione in scala di grigi
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
@@ -44,19 +44,17 @@ def watershed_segmentation_with_markers(image):
     # Applicazione della soglia
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-    # Rimozione del rumore
-    kernel = np.ones((3, 3), np.uint8)
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
 
-    # Determinazione dell'area di sfondo certa
-    sure_bg = cv2.dilate(opening, kernel, iterations=3)
-
-    # Determinazione dell'area di primo piano certa
-    dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
-    _, sure_fg = cv2.threshold(dist_transform, 0.7 * dist_transform.max(), 255, 0)
-
-    # Determinazione dell'area sconosciuta
-    sure_fg = np.uint8(sure_fg)
+    sure_bg = cv2.dilate(thresh, kernel, iterations=3)
+    
+    # 4. Trasformata della distanza con normalizzazione
+    dist_transform = cv2.distanceTransform(thresh, cv2.DIST_L2, 5)
+    cv2.normalize(dist_transform, dist_transform, 0, 1.0, cv2.NORM_MINMAX)
+    
+    # 5. Rilevamento picchi per foreground sicuro
+    _, sure_fg = cv2.threshold(dist_transform, 0.5 * dist_transform.max(), 255, 0)
+    sure_fg = sure_fg.astype(np.uint8)
     unknown = cv2.subtract(sure_bg, sure_fg)
 
     # Etichettatura dei marcatori
@@ -68,11 +66,6 @@ def watershed_segmentation_with_markers(image):
     # Etichettatura dell'area sconosciuta con 0
     markers[unknown == 255] = 0
 
-    # Visualizzazione dei marker con barre verdi
-    marker_positions = np.argwhere(sure_fg == 255)
-    for pos in marker_positions:
-        cv2.drawMarker(image_bgr, tuple(pos[::-1]), (0, 255, 0), markerType=cv2.MARKER_TILTED_CROSS, markerSize=10, thickness=2)
-
     # Applicazione dell'algoritmo di watershed
     markers = cv2.watershed(image_bgr, markers)
 
@@ -80,5 +73,4 @@ def watershed_segmentation_with_markers(image):
     mask = np.zeros_like(gray, dtype=np.uint8)
     mask[markers > 1] = 255
 
-    return mask, image_bgr
-
+    return mask
