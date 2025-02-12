@@ -37,20 +37,19 @@ class ImageSlice:
         Applies pre-processing (denoising, CLAHE, and erosion) to each image.
         """
         self.preprocessed_wga = pi.enhance_image(self.path_wga)
-        self.preprocessed_collagen = pi.enhance_image(self.path_collagen)
         self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence)
+        self.preprocessed_collagen = self.preprocessed_auto #pi.enhance_autoilluminescence_with_sobel(self.path_collagen)
+        
 
     def _segment_image(self):
 
-        self.segmented_tissue = seg.adaptive_thresholding(self.preprocessed_wga)
+        self.segmented_tissue = seg.watershed_segmentation(self.preprocessed_wga)
 
         # Apply mask of tissue region to the autofluorescence image
-        #auto_processed = pi.apply_mask(self.preprocessed_auto, self.segmented_tissue)
-        self.segmented_cardios = seg.adaptive_thresholding(self.preprocessed_auto)
+        self.segmented_cardios = seg.watershed_segmentation(self.preprocessed_auto)
         
         # Remove from tissue mask the regions that are cardios
-        #self.segmented_collagen = pi.apply_mask(auto_processed, cv2.bitwise_not(self.segmented_cardios))
-        self.segmented_collagen = seg.adaptive_thresholding(self.preprocessed_collagen)
+        self.segmented_collagen = seg.watershed_segmentation(self.preprocessed_collagen)
 
     def _postprocess(self):
         self.tissue_contours = post.extract_external_contours(self.segmented_tissue)
@@ -84,5 +83,5 @@ class ImageSlice:
     def analyse_image(self):
         self._preprocess()
         self._segment_image()
-        self._postprocess()
+        #self._postprocess()
         self._save_results()
