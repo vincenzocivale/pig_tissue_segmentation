@@ -31,16 +31,16 @@ class ImageSlice:
         self.cardios_contours = None
         self.collagen_contours = None
 
-    def analyse_image(self):
+    def analyse_image(self, predictor):
         # Use the image of collagen to segment the tissue external contour
         self.preprocessed_collagen = pi.enhance_image(self.path_collagen)
-        self.segmented_tissue = seg.watershed_segmentation(self.preprocessed_collagen)
+        self.segmented_tissue = seg.SAM2ImagePredictor(predictor, self.preprocessed_collagen)
 
         # Apply mask of tissue region to the autofluorescence image and the execute pre processing
         self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence, mask=self.segmented_tissue)
 
         #Segment internal regions from the autofluorescence image
-        self.segmented_cardios =  cv2.bitwise_not(seg.watershed_segmentation(self.preprocessed_auto))
+        self.segmented_cardios =  seg.SAM2ImagePredictor(predictor, self.preprocessed_auto)
 
         # DA MODIFICARE
         self.segmented_collagen = self.segmented_cardios
