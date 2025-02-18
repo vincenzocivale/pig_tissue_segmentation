@@ -1,6 +1,5 @@
 import subprocess
 import os
-import wget
 
 import torch
 from sam2.sam2_image_predictor import SAM2ImagePredictor
@@ -21,6 +20,12 @@ def setup_sam2(home_directory):
     os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
     subprocess.run(['wget', '-q', checkpoint_url, '-P', os.path.dirname(checkpoint_path)], check=True)
 
+    
+    
+
+
+def load_sam2(home_directory, device):
+
     # Configura PyTorch per l'uso della GPU
     if torch.cuda.is_available():
         torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
@@ -31,11 +36,10 @@ def setup_sam2(home_directory):
     else:
         device = torch.device('cpu')
 
-    # Carica il modello SAM2
     checkpoint = os.path.join(home_directory, 'checkpoints', 'sam2_hiera_large.pt')
     config = 'sam2_hiera_l.yaml'
     sam2_model = build_sam2(config, checkpoint, device=device, apply_postprocessing=False)
 
     predictor = SAM2ImagePredictor(sam2_model)
-    
+
     return predictor
