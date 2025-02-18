@@ -131,11 +131,27 @@ def watershed_segmentation(image, exclusion_mask=None):
     return mask
 
 
-def SAM2_Segmentation(image, seed):
-    predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
+def calculate_boundy_box(img):
+    
+    height, width, _ = img.shape
+    bounding_box = np.array([[0, 0, width, height]])
 
-    with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-        predictor.set_image(image)
-        masks, _, _ = predictor.predict(seed)
+    return bounding_box
 
-    return masks[0].cpu().numpy()
+def segmentation_with_box(predictor, image):
+    if len(image.shape) == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        
+    predictor.set_image(image)
+
+    bounding_box = calculate_boundy_box(image)
+
+    masks, scores, logits = predictor.predict(
+        box=bounding_box,
+        multimask_output=False
+    )
+
+    if len(masks) == 1:
+        return masks[0]
+    else:
+        raise ValueError("Expected a single mask, but got multiple masks.")

@@ -2,7 +2,7 @@ import cv2
 import os
 
 import src.data.pre_process_image as pi
-import src.data.segmentation as seg
+import src.models.segmentation as seg
 import src.data.post_process_image as post
 
 class ImageSlice:
