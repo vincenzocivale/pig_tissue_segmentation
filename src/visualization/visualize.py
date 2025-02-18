@@ -13,10 +13,6 @@ def load_image(image_path):
     return np.array(img)
 
 
-# Caricamento dell'immagine (inserisci il percorso corretto)
-image_path = r'C:\Users\cical\Documents\GitHub\Repositories\pig_tissue_segmentation\equalized_image.jpg' # Modifica con il tuo file TIFF
-image_array = load_image(image_path)
-
 
 # Funzione per plottare l'istogramma dell'immagine
 def plot_histogram(image_array):
@@ -27,5 +23,11 @@ def plot_histogram(image_array):
     plt.ylabel('Frequency')
     plt.show()
 
-# Plot dell'istogramma dell'immagine caricata
-plot_histogram(image_array)
+# Funzione per plottare l'immagine e attendere la chiusura della finestra
+def plot_image(image_array):
+        plt.figure()
+        plt.imshow(image_array, cmap='gray')
+        plt.title('Image')
+        plt.axis('off')
+        plt.show(block=True)
+

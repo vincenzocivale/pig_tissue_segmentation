@@ -1,6 +1,7 @@
 from PIL import Image
 import numpy as np
 import cv2
+Image.MAX_IMAGE_PIXELS = None
 
 def load_tif_image(image_path):
     with Image.open(image_path) as img:
@@ -78,12 +79,66 @@ def bilateral_downsample(image, scale_percent=50, d=9, sigma_color=75, sigma_spa
     
     return downscaled_image
 
-def enhance_image(img_path, kernel_size=3, iterations=1):
-        
-    image = load_tif_image(img_path)
-    downsampled_image = bilateral_downsample(image, scale_percent=50)
-    denoised = cv2.GaussianBlur(downsampled_image, (3,3), 0)
-    eroded_image = erode_image(denoised, kernel_size, iterations)
-    clahe_image = apply_CLAHE(eroded_image)
+def histogram_stretching(image):
+    min_val = np.min(image)
+    max_val = np.max(image)
+    stretched = (image - min_val) * (255.0 / (max_val - min_val))
+    return stretched.astype(np.uint8)
 
-    return clahe_image
+def gamma_correction(image, gamma=1.2):
+    inv_gamma = 1.0 / gamma
+    table = np.array([(i / 255.0) ** inv_gamma * 255 for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+def unsharp_mask(image, sigma=1.0, strength=1.5):
+    blurred = cv2.GaussianBlur(image, (0, 0), sigma)
+    sharpened = cv2.addWeighted(image, 1 + strength, blurred, -strength, 0)
+    return sharpened
+
+def histogram_specification(image, reference):
+    image_hist, bins = np.histogram(image.flatten(), 256, [0, 256])
+    reference_hist, _ = np.histogram(reference.flatten(), 256, [0, 256])
+
+    cdf_image = image_hist.cumsum()
+    cdf_ref = reference_hist.cumsum()
+
+    cdf_image = (cdf_image - cdf_image.min()) * 255 / (cdf_image.max() - cdf_image.min())
+    cdf_ref = (cdf_ref - cdf_ref.min()) * 255 / (cdf_ref.max() - cdf_ref.min())
+
+    lut = np.interp(cdf_image, cdf_ref, np.arange(256))
+    transformed_image = np.interp(image.flatten(), bins[:-1], lut).reshape(image.shape)
+    
+    return transformed_image.astype(np.uint8)
+
+def adaptive_gamma_correction(image, alpha=0.5, beta=1.5):
+    mean_intensity = np.mean(image) / 255.0  # Normalizza tra 0 e 1
+    gamma = beta - (beta - alpha) * mean_intensity  # Adatta gamma dinamicamente
+    return gamma_correction(image, gamma)
+
+
+
+def enhance_image(img_path, mask=None, reference=None):
+    image = load_tif_image(img_path)
+
+    if len(image.shape) == 3:
+        image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        image_gray = image
+
+    # Step 1: Aumenta il contrasto con histogram stretching
+    image_gray = histogram_stretching(image_gray)
+
+    # Step 2: Applica Adaptive Gamma Correction
+    image_gray = adaptive_gamma_correction(image_gray)
+
+    # Step 3: Se c'è un'immagine di riferimento, esegui histogram specification
+    if reference is not None:
+        ref_gray = cv2.cvtColor(reference, cv2.COLOR_RGB2GRAY) if len(reference.shape) == 3 else reference
+        image_gray = histogram_specification(image_gray, ref_gray)
+
+    # Step 4: Se è presente una maschera, applicala
+    if mask is not None:
+        image_gray = apply_mask(image_gray, mask)
+
+    return image_gray
+

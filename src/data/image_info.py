@@ -31,31 +31,27 @@ class ImageSlice:
         self.cardios_contours = None
         self.collagen_contours = None
 
+    def analyse_image(self):
+        # Use the image of collagen to segment the tissue external contour
+        self.preprocessed_collagen = pi.enhance_image(self.path_collagen)
+        self.segmented_tissue = seg.watershed_segmentation(self.preprocessed_collagen)
 
-    def _preprocess(self, ):
-        """
-        Applies pre-processing (denoising, CLAHE, and erosion) to each image.
-        """
-        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence)
-        self.preprocessed_wga = self.preprocessed_auto
-        self.preprocessed_collagen = self.preprocessed_auto #pi.enhance_autoilluminescence_with_sobel(self.path_collagen)
-        
+        # Apply mask of tissue region to the autofluorescence image and the execute pre processing
+        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence, mask=self.segmented_tissue)
 
-    def _segment_image(self):
+        #Segment internal regions from the autofluorescence image
+        self.segmented_cardios =  cv2.bitwise_not(seg.watershed_segmentation(self.preprocessed_auto))
 
-        self.segmented_tissue = seg.watershed_segmentation(self.preprocessed_wga)
+        # DA MODIFICARE
+        self.segmented_collagen = self.segmented_cardios
 
-        # Apply mask of tissue region to the autofluorescence image
-        masked_auto = pi.apply_mask(self.preprocessed_auto, self.segmented_tissue)
-        self.segmented_cardios = seg.watershed_segmentation(masked_auto)
-        
-        # Remove from tissue mask the regions that are cardios
-        self.segmented_collagen = seg.watershed_segmentation(self.preprocessed_collagen)
+        self._save_results()
+
 
     def _postprocess(self):
-        self.tissue_contours = post.extract_external_contours(self.segmented_tissue)
-        self.cardios_contours = post.extract_external_contours(self.segmented_cardios)
-        self.collagen_contours = post.extract_external_contours(self.segmented_collagen)
+        self.tissue_contours = post.extract_smoothed_contours(self.segmented_tissue)
+        self.cardios_contours = post.extract_smoothed_contours(self.segmented_cardios)
+        self.collagen_contours = post.extract_smoothed_contours(self.segmented_collagen)
 
     def _save_results(self):
         if not os.path.isdir(self.output_folder):
@@ -64,7 +60,7 @@ class ImageSlice:
         slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
         os.makedirs(slice_folder, exist_ok=True)
 
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_wga.png"), self.preprocessed_wga)
+        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_wga.png"), self.preprocessed_wga)
         cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
         cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_auto.png"), self.preprocessed_auto)
 
@@ -72,17 +68,14 @@ class ImageSlice:
         cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
         cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)
 
-        # # Create an image with contours
-        # wga_image = cv2.imread(self.path_wga, cv2.IMREAD_GRAYSCALE)
-        # img_with_contours = cv2.cvtColor(wga_image, cv2.COLOR_GRAY2BGR)
-
-        # cv2.drawContours(img_with_contours, self.tissue_contours, -1, (0, 255, 0), 1)  # Green for tissue
-        # cv2.drawContours(img_with_contours, self.cardios_contours, -1, (0, 0, 255), 1)  # Red for cardios
-
-        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours.png"), img_with_contours)
-
-    def analyse_image(self):
-        self._preprocess()
-        self._segment_image()
-        #self._postprocess()
-        self._save_results()
+        # # # Create an image with contours
+        # contours_tissue = post.draw_dashed_contours(self.preprocessed_auto, self.tissue_contours, color=(0, 255, 0))
+        # contours_cardios = post.draw_dashed_contours(self.preprocessed_auto, self.cardios_contours, color=(0, 0, 255))
+        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours_tissue.png"), contours_tissue)
+        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours_cardios.png"), contours_cardios)
+    
+    # def analyse_image(self):
+    #     self._preprocess()
+    #     self._segment_image()
+    #     self._postprocess()
+    #     self._save_results()
