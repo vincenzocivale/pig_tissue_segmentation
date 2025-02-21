@@ -142,3 +142,9 @@ def enhance_image(img_path, mask=None, reference=None):
 
     return image_gray
 
+# load_mask = np.load(r"C:\Users\cical\Downloads\mask.npy")
+# mask = load_mask[0]
+# mask = np.logical_not(mask.astype(bool)).astype(np.uint8) * 255
+# cv2.imwrite(r"C:\Users\cical\Downloads\mask.png", mask)
+# enhanced_image = enhance_image(r"C:\Users\cical\Documents\GitHub\Repositories\pig_tissue_segmentation\data\raw\BZ5_BZ5_CH1_AUTO_MIP.tif", mask)
+# cv2.imwrite(r"C:\Users\cical\Downloads\enhanced_image.png", enhanced_image)

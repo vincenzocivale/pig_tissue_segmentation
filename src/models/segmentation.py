@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from sklearn.cluster import KMeans
 
 import sys
 project_home_dir= r"D:\Repositories\pig_tissue_segmentation-main"
@@ -345,3 +346,52 @@ def segmentation_with_seeds(predictor, image) -> np.ndarray:
     return np.logical_not(masks.astype(bool))
 
 
+def cluster_image(image_path, num_clusters, use_spatial=False, spatial_weight=0.1):
+    """
+    Segmenta un'immagine in 'num_clusters' cluster utilizzando k-means.
+    
+    Parametri:
+    - image_path: percorso dell'immagine da segmentare.
+    - num_clusters: numero di cluster in cui dividere l'immagine.
+    - use_spatial: se True, le coordinate spaziali vengono aggiunte come feature.
+    - spatial_weight: peso relativo delle coordinate spaziali (utile per bilanciare il contributo del colore).
+    
+    Ritorna:
+    - segmented_image: immagine segmentata in cui ogni pixel assume il colore del suo cluster.
+    """
+    # Carica l'immagine e convertila in RGB
+    image = cv2.imread(image_path)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    h, w, c = image_rgb.shape
+
+    # Prepara le feature per il clustering
+    if not use_spatial:
+        # Usa solo le informazioni di colore: reshape in (N, 3)
+        features = image_rgb.reshape((-1, 3))
+        features = np.float32(features)
+    else:
+        # Crea una matrice che includa anche le coordinate spaziali
+        # Normalizza i valori di colore nell'intervallo [0, 1]
+        color_features = image_rgb.reshape((-1, 3)).astype(np.float32) / 255.0
+        # Crea una meshgrid delle coordinate (x, y)
+        X, Y = np.meshgrid(np.arange(w), np.arange(h))
+        X = X.reshape((-1, 1)).astype(np.float32) / w  # normalizzazione
+        Y = Y.reshape((-1, 1)).astype(np.float32) / h  # normalizzazione
+        # Concatena le feature di colore con quelle spaziali (eventualmente pesate)
+        features = np.concatenate((color_features, spatial_weight * X, spatial_weight * Y), axis=1)
+
+    # Applica il clustering k-means
+    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+    labels = kmeans.fit_predict(features)
+
+    # Estrai i centroidi e ricostruisci l'immagine segmentata
+    if not use_spatial:
+        centers = np.uint8(kmeans.cluster_centers_)
+    else:
+        # Se abbiamo aggiunto le coordinate, consideriamo solo le prime 3 colonne per il colore
+        centers = (kmeans.cluster_centers_[:, :3] * 255).astype(np.uint8)
+
+    segmented_data = centers[labels.flatten()]
+    segmented_image = segmented_data.reshape(image_rgb.shape)
+
+    return segmented_image

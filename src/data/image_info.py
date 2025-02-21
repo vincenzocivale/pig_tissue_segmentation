@@ -45,17 +45,17 @@ class ImageSlice:
         cv2.imwrite(processed_collagen_path, self.preprocessed_collagen)
 
         #tissue_mask = seg.segmentation_with_box(predictor,processed_collagen_path)
-        tissue_mask = seg.apply_otsu_threshold(processed_collagen_path)
+        tissue_mask = seg.cluster_image(processed_collagen_path)
         #self.segmented_tissue= seg.annotate_mask_only(self.preprocessed_collagen, tissue_mask)
         self.segmented_tissue = tissue_mask
 
         # Apply mask of tissue region to the autofluorescence image and the execute pre processing
-        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence)
+        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence, tissue_mask)
         preprocessed_auto_path = os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_auto.png")
         cv2.imwrite(preprocessed_auto_path, self.preprocessed_auto)
 
         #cardio_mask = seg.segmentation_with_box(predictor, preprocessed_auto_path)
-        cardio_mask = seg.apply_otsu_threshold(preprocessed_auto_path, tissue_mask)
+        cardio_mask = seg.cluster_image(preprocessed_auto_path, tissue_mask)
         #self.segmented_cardios= seg.annotate_mask_only(self.preprocessed_collagen, cardio_mask)
         self.segmented_cardios = cardio_mask
 
