@@ -36,7 +36,8 @@ def load_sam2(home_directory, device):
     else:
         device = torch.device('cpu')
 
-    checkpoint = os.path.join(home_directory, 'checkpoints', 'sam2_hiera_large.pt')
+    #checkpoint = os.path.join(home_directory, 'checkpoints', 'sam2_hiera_large.pt')
+    checkpoint = r"C:\Users\Admin\Downloads\sam2_hiera_large.pt"
     config = 'sam2_hiera_l.yaml'
     sam2_model = build_sam2(config, checkpoint, device=device, apply_postprocessing=False)
 

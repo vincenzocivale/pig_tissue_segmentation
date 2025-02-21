@@ -1,9 +1,11 @@
 import cv2
 import numpy as np
-from src.visualization.visualize import plot_image
 
-import torch
-from sam2.sam2_image_predictor import SAM2ImagePredictor
+import sys
+project_home_dir= r"D:\Repositories\pig_tissue_segmentation-main"
+sys.path.append(project_home_dir)
+
+import supervision as sv
 
 
 
@@ -138,13 +140,13 @@ def calculate_boundy_box(img):
 
     return bounding_box
 
-def segmentation_with_box(predictor, image):
-    if len(image.shape) == 2:
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+def segmentation_with_box(predictor, image_path) -> np.ndarray:
+    image_bgr = cv2.imread(image_path)
+    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
         
-    predictor.set_image(image)
+    predictor.set_image(image_rgb)
 
-    bounding_box = calculate_boundy_box(image)
+    bounding_box = calculate_boundy_box(image_rgb)
 
     masks, scores, logits = predictor.predict(
         box=bounding_box,
@@ -152,6 +154,194 @@ def segmentation_with_box(predictor, image):
     )
 
     if len(masks) == 1:
-        return masks[0]
+       #return annotate_mask_only(image, masks)
+       return np.logical_not(masks.astype(bool))
     else:
         raise ValueError("Expected a single mask, but got multiple masks.")
+    
+
+def annotate_mask_only(image, masks):
+        #masks = np.logical_not(masks.astype(bool))
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Creiamo l'annotatore per la maschera
+        mask_annotator = sv.MaskAnnotator(color_lookup=sv.ColorLookup.INDEX)
+
+        # Creiamo l'oggetto `Detections` con solo la maschera
+        detections = sv.Detections(
+            xyxy=sv.mask_to_xyxy(masks=masks),
+            mask=masks.astype(bool)
+        )
+
+        segmented_image = mask_annotator.annotate(scene=image.copy(), detections=detections)
+
+        return segmented_image
+
+def double_otsu_thresholding(image):
+    """
+    Apply double Otsu's thresholding to segment the image into
+    background, foreground, and uncertain regions.
+
+    Parameters:
+        image (numpy.ndarray): Grayscale image.
+
+    Returns:
+        tuple: Binary masks for background, foreground, and uncertain regions.
+    """
+    if len(image.shape) > 2 and image.shape[2] == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        image = image
+    
+    # First Otsu's threshold
+    _, threshold1 = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # Invert the image for the second Otsu's threshold
+    _, threshold2 = cv2.threshold(255 - image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # Create masks for background, foreground, and uncertain regions
+    background_mask = (image <= threshold1).astype(np.uint8)
+    foreground_mask = (image > 255 - threshold2).astype(np.uint8)
+    uncertain_mask = ((image > threshold1) & (image <= 255 - threshold2)).astype(np.uint8)
+    
+    return background_mask, foreground_mask, uncertain_mask
+
+
+def apply_otsu_threshold(image_path, mask=None):
+    """
+    Applica la soglia di Otsu su un'immagine utilizzando una maschera opzionale per definire la ROI.
+
+    Args:
+        image_path (str): Percorso dell'immagine di input.
+        mask_path (str, opzionale): Percorso della maschera. Se None, l'intera immagine viene utilizzata come ROI.
+
+    Returns:
+        binary_mask (numpy.ndarray): Maschera binaria risultante dopo l'applicazione della soglia di Otsu.
+    """
+    # Carica l'immagine in scala di grigi
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        raise ValueError(f"Impossibile caricare l'immagine dal percorso: {image_path}")
+    
+    if mask is not None:
+        # Assicurati che la maschera sia binaria
+        _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+
+        # Applica la maschera all'immagine per ottenere la ROI
+        roi = cv2.bitwise_and(image, image, mask=mask)
+
+        # Calcola l'istogramma dei pixel nella ROI
+        hist = cv2.calcHist([roi], [0], mask, [256], [0, 256])
+
+        # Calcola la soglia di Otsu utilizzando l'istogramma
+        total = np.sum(hist)
+        current_max, threshold = 0, 0
+        sum_total, sum_foreground = 0, 0
+        weight_background, weight_foreground = 0, 0
+
+        for i in range(256):
+            sum_total += i * hist[i]
+            weight_background += hist[i]
+            if weight_background == 0:
+                continue
+            weight_foreground = total - weight_background
+            if weight_foreground == 0:
+                break
+            sum_foreground += i * hist[i]
+            mean_background = sum_total / weight_background
+            mean_foreground = (sum_total - sum_foreground) / weight_foreground
+            between_class_variance = weight_background * weight_foreground * (mean_background - mean_foreground) ** 2
+            if between_class_variance > current_max:
+                current_max = between_class_variance
+                threshold = i
+
+        # Applica la soglia calcolata all'intera immagine
+        _, binary_mask = cv2.threshold(image, threshold, 255, cv2.THRESH_BINARY)
+        _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
+
+        # Applica la maschera all'immagine per ottenere la ROI
+        roi = cv2.bitwise_and(image, image, mask=mask)
+
+        # Calcola l'istogramma dei pixel nella ROI
+        hist = cv2.calcHist([roi], [0], mask, [256], [0, 256])
+
+        # Calcola la soglia di Otsu utilizzando l'istogramma
+        total = np.sum(hist)
+        current_max, threshold = 0, 0
+        sum_total, sum_foreground = 0, 0
+        weight_background, weight_foreground = 0, 0
+
+        for i in range(256):
+                sum_total += i * hist[i]
+                weight_background += hist[i]
+                if weight_background == 0:
+                    continue
+                weight_foreground = total - weight_background
+                if weight_foreground == 0:
+                    break
+                sum_foreground += i * hist[i]
+                mean_background = sum_total / weight_background
+                mean_foreground = (sum_total - sum_foreground) / weight_foreground
+                between_class_variance = weight_background * weight_foreground * (mean_background - mean_foreground) ** 2
+                if between_class_variance > current_max:
+                    current_max = between_class_variance
+                    threshold = i
+
+        # Applica la soglia calcolata all'intera immagine
+        _, binary_mask = cv2.threshold(image, threshold, 255, cv2.THRESH_BINARY)
+    else:
+        # Se non viene fornita una maschera, applica direttamente la soglia di Otsu all'intera immagine
+        _, binary_mask = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    return binary_mask
+
+
+def select_foreground_seeds(foreground_mask, num_seeds=1):
+    """
+    Select seed points from the foreground mask.
+
+    Parameters:
+        foreground_mask (numpy.ndarray): Binary mask of the foreground region.
+        num_seeds (int): Number of seed points to select.
+
+    Returns:
+        list: List of [x, y] coordinates for the selected seed points.
+    """
+    # Find contours in the foreground mask
+    contours, _ = cv2.findContours(foreground_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    seeds = []
+    for contour in contours:
+        # Calculate the centroid of each contour
+        moments = cv2.moments(contour)
+        if moments['m00'] != 0:
+            cx = int(moments['m10'] / moments['m00'])
+            cy = int(moments['m01'] / moments['m00'])
+            seeds.append([cx, cy])
+    
+    # Sort seed points based on their distance from the image center
+    height, width = foreground_mask.shape
+    center = np.array([width // 2, height // 2])
+    seeds.sort(key=lambda s: np.linalg.norm(np.array(s) - center))
+    
+    # Return the specified number of seed points
+    return np.array(seeds[:num_seeds])
+
+def segmentation_with_seeds(predictor, image) -> np.ndarray:
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+    predictor.set_image(image)
+
+    background_mask, foreground_mask, uncertain_mask = double_otsu_thresholding(image)
+
+    # Select seed points for the foreground
+    foreground_seeds = select_foreground_seeds(foreground_mask, num_seeds=10)
+
+    masks, scores, logits = predictor.predict(
+    point_coords=foreground_seeds,
+    point_labels= np.ones(foreground_seeds.shape[0]),
+    multimask_output=False,
+    )
+
+    return np.logical_not(masks.astype(bool))
+
+

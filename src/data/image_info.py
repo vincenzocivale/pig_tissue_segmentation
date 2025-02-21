@@ -1,6 +1,10 @@
 import cv2
 import os
 
+import numpy as np
+import matplotlib.pyplot as plt
+import supervision as sv
+
 import src.data.pre_process_image as pi
 import src.models.segmentation as seg
 import src.data.post_process_image as post
@@ -31,21 +35,38 @@ class ImageSlice:
         self.cardios_contours = None
         self.collagen_contours = None
 
-    def analyse_image(self, predictor):
+    def analyse_image(self, predictor=None):
+        slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
+        os.makedirs(slice_folder, exist_ok=True)
+
         # Use the image of collagen to segment the tissue external contour
         self.preprocessed_collagen = pi.enhance_image(self.path_collagen)
-        self.segmented_tissue = seg.SAM2ImagePredictor(predictor, self.preprocessed_collagen)
+        processed_collagen_path = os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_collagen.png")
+        cv2.imwrite(processed_collagen_path, self.preprocessed_collagen)
+
+        #tissue_mask = seg.segmentation_with_box(predictor,processed_collagen_path)
+        tissue_mask = seg.apply_otsu_threshold(processed_collagen_path)
+        #self.segmented_tissue= seg.annotate_mask_only(self.preprocessed_collagen, tissue_mask)
+        self.segmented_tissue = tissue_mask
 
         # Apply mask of tissue region to the autofluorescence image and the execute pre processing
-        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence, mask=self.segmented_tissue)
+        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence)
+        preprocessed_auto_path = os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_auto.png")
+        cv2.imwrite(preprocessed_auto_path, self.preprocessed_auto)
 
-        #Segment internal regions from the autofluorescence image
-        self.segmented_cardios =  seg.SAM2ImagePredictor(predictor, self.preprocessed_auto)
+        #cardio_mask = seg.segmentation_with_box(predictor, preprocessed_auto_path)
+        cardio_mask = seg.apply_otsu_threshold(preprocessed_auto_path, tissue_mask)
+        #self.segmented_cardios= seg.annotate_mask_only(self.preprocessed_collagen, cardio_mask)
+        self.segmented_cardios = cardio_mask
 
+        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
+        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
+       
         # DA MODIFICARE
         self.segmented_collagen = self.segmented_cardios
 
-        self._save_results()
+        #self._save_results()
+
 
 
     def _postprocess(self):
@@ -68,7 +89,7 @@ class ImageSlice:
         cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
         cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)
 
-        # # # Create an image with contours
+        # # Create an image with contours
         # contours_tissue = post.draw_dashed_contours(self.preprocessed_auto, self.tissue_contours, color=(0, 255, 0))
         # contours_cardios = post.draw_dashed_contours(self.preprocessed_auto, self.cardios_contours, color=(0, 0, 255))
         # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours_tissue.png"), contours_tissue)
