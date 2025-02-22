@@ -142,35 +142,32 @@ def apply_otsu_threshold(image_path, mask=None):
     return binary_mask
 
 
-def extract_features(image, segments, mask):
+def extract_features(image, segments):
     """
-    Estrae le feature (intensità, texture, spaziali) dai superpixel nell'area della maschera.
+    Estrae le feature (intensità, texture, spaziali) dai superpixel senza usare la maschera.
 
     Args:
         image: Immagine in scala di grigi
         segments: Mappa dei superpixel
-        mask: Maschera binaria
 
     Returns:
         features: Lista di feature per ciascun superpixel
-        valid_labels: Etichette valide dei superpixel
     """
     features = []
-    valid_labels = []
     
     for label in np.unique(segments):
-        mask_region = (segments == label) & (mask == 1)
+        mask_region = (segments == label)
 
         if np.sum(mask_region) > 0:  # Considera solo i superpixel validi
-            intensity = np.mean(image[mask_region])
-            texture = cv2.Laplacian(image, cv2.CV_64F)[mask_region].var()
+            intensity = np.mean(image[mask_region])  # Intensità media del superpixel
+            texture = cv2.Laplacian(image, cv2.CV_64F)[mask_region].var()  # Variance della texture (Laplaciano)
             spatial = [np.mean(np.where(mask_region)[0] / image.shape[0]), 
-                       np.mean(np.where(mask_region)[1] / image.shape[1])]
+                       np.mean(np.where(mask_region)[1] / image.shape[1])]  # Coordinate spaziali normalizzate
 
             features.append([intensity, texture, *spatial])
-            valid_labels.append(label)
 
-    return features, valid_labels
+    return features
+
 
 def perform_clustering(features, segments, n_clusters=2):
     """
@@ -204,8 +201,6 @@ def perform_clustering(features, segments, n_clusters=2):
     return masks
 
 
-
-
 def superpixel_clustering_segmentation(gray, mask, segments, n_clusters=2):
     """
     Funzione principale per la segmentazione con superpixel e clustering KMeans.
@@ -229,7 +224,7 @@ def superpixel_clustering_segmentation(gray, mask, segments, n_clusters=2):
     else:
         mask = mask
 
-    features, valid_labels = extract_features(gray, segments, mask)
+    features = extract_features(gray, segments, mask)
     masks = perform_clustering(features, segments, n_clusters)
     
     return masks

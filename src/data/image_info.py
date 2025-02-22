@@ -77,7 +77,7 @@ class ImageSlice:
         self.preprocessed_auto = pi.enhance_image(self.autofluorescence, self.segmented_tissue)
         self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
 
-        masks_unsupervised = seg.superpixel_clustering_segmentation(self.superpixel_segments, self.preprocessed_auto)
+        masks_unsupervised = seg.superpixel_clustering_segmentation(self.preprocessed_auto, mask=self.segmented_tissue , segments=self.superpixel_segments)
 
         # unsupervised segmentation, so I don't know which is collagen and which is cardios
         self.segmented_cardios = masks_unsupervised[0]
