@@ -6,9 +6,6 @@ import matplotlib.pyplot as plt
 import supervision as sv
 from skimage.segmentation import mark_boundaries
 
-import sys
-project_home_dir= r"D:\Repositories\pig_tissue_segmentation-main"
-sys.path.append(project_home_dir)
 
 import src.data.pre_process_image as pi
 
@@ -20,7 +17,7 @@ def calculate_boundy_box(img):
 
     return bounding_box
 
-def segmentation_with_box(predictor, image_bgr) -> np.ndarray:
+def segmentation_with_box(image_bgr, predictor) -> np.ndarray:
 
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
         

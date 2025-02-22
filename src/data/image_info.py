@@ -39,20 +39,41 @@ class ImageSlice:
         self.external_contours = None
         self.internal_contours = None
 
-    def load_images(self, path_wga, path_collagen, path_autofluorescence):
-        self.wga = pi.load_tif_image(path_wga)
-        self.collagen = pi.load_tif_image(path_collagen)
-        self.autofluorescence = pi.load_tif_image(path_autofluorescence)
+    def load_images(self, path_wga, path_collagen, path_autofluorescence, resize_factor=0.5):
+        wga_image = pi.load_tif_image(path_wga)
+        collagen_image = pi.load_tif_image(path_collagen)
+        autofluorescence_image = pi.load_tif_image(path_autofluorescence)
 
+        self.wga = pi.reduce_image(wga_image, resize_factor)
+        self.collagen = pi.reduce_image(collagen_image, resize_factor)
+        self.autofluorescence = pi.reduce_image(autofluorescence_image, resize_factor)
+        
     def analyse_image(self, predictor=None):
         slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
         os.makedirs(slice_folder, exist_ok=True)
 
         # Use the image of collagen to segment the tissue external contour
         self.preprocessed_collagen = pi.enhance_image(self.collagen)
-        self.segmented_tissue = seg.segmentation_with_box(self.preprocessed_collagen)
+        self.segmented_tissue = seg.segmentation_with_box(self.preprocessed_collagen, predictor)
 
         # Apply mask of tissue region to the autofluorescence image and the execute pre processing
+        self.preprocessed_auto = pi.enhance_image(self.autofluorescence, self.segmented_tissue)
+        self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
+
+        masks_unsupervised = seg.superpixel_clustering_segmentation(self.superpixel_segments, self.preprocessed_auto)
+
+        # unsupervised segmentation, so I don't know which is collagen and which is cardios
+        self.segmented_cardios = masks_unsupervised[0]
+        self.segmented_collagen = masks_unsupervised[1]
+    
+    def analyse_image2(self, mask_path):
+        slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
+        os.makedirs(slice_folder, exist_ok=True)
+
+        # Load the binary mask for tissue segmentation
+        self.segmented_tissue = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        
+        # Apply mask of tissue region to the autofluorescence image and then execute pre-processing
         self.preprocessed_auto = pi.enhance_image(self.autofluorescence, self.segmented_tissue)
         self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
 

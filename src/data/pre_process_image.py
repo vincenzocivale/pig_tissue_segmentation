@@ -1,6 +1,7 @@
 from PIL import Image
 import numpy as np
 import cv2
+from skimage import transform
 from skimage.segmentation import slic
 
 Image.MAX_IMAGE_PIXELS = None
@@ -20,11 +21,7 @@ def erode_image(image, kernel_size=3, iterations=1):
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     return cv2.erode(image, kernel, iterations=iterations)
 
-def reduce_resolution(image, scale_percent):
-    width = int(image.shape[1] * scale_percent / 100)
-    height = int(image.shape[0] * scale_percent / 100)
-    dim = (width, height)
-    return cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+
 
 def apply_mask(image, mask):
     # Converti la maschera in binaria e in uint8
@@ -127,14 +124,38 @@ def adaptive_gamma_correction(image, alpha=0.5, beta=1.5):
     gamma = beta - (beta - alpha) * mean_intensity  # Adatta gamma dinamicamente
     return gamma_correction(image, gamma)
 
+def reduce_image(image, scale_factor=0.5):
+    """
+    Riduce le dimensioni dell'immagine applicando un fattore di scala.
 
+    Parameters:
+        image (ndarray): Immagine di input (ad es. caricata con skimage.io.imread).
+        scale_factor (float): Fattore di scala per la riduzione.
+                              Ad esempio, 0.5 riduce l'immagine alla metà della dimensione originale.
 
-def enhance_image(image, mask=None, reference=None):
+    Returns:
+        ndarray: Immagine ridimensionata.
+    """
+    # Calcola le nuove dimensioni
+    new_rows = int(image.shape[0] * scale_factor)
+    new_cols = int(image.shape[1] * scale_factor)
+
+    # Ridimensiona l'immagine
+    image_resized = transform.resize(image, (new_rows, new_cols), anti_aliasing=True)
+
+    # Se l'immagine originale era in formato uint8, riconvertiamo il risultato in uint8
+    if image.dtype == np.uint8:
+        image_resized = (image_resized * 255).astype(np.uint8)
+
+    return image_resized
+
+def enhance_image(image, scale_factor = 0.5,mask=None, reference=None):
 
     if len(image.shape) == 3:
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         image_gray = image
+
 
     # Step 1: Aumenta il contrasto con histogram stretching
     image_gray = histogram_stretching(image_gray)
