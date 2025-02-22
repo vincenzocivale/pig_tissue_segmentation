@@ -36,9 +36,8 @@ class ImageSlice:
         self.segmented_cardios = None
         self.segmented_collagen = None
 
-        self.tissue_contours = None
-        self.cardios_contours = None
-        self.collagen_contours = None
+        self.external_contours = None
+        self.internal_contours = None
 
     def load_images(self, path_wga, path_collagen, path_autofluorescence):
         self.wga = pi.load_tif_image(path_wga)
