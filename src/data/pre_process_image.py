@@ -124,7 +124,7 @@ def adaptive_gamma_correction(image, alpha=0.5, beta=1.5):
     gamma = beta - (beta - alpha) * mean_intensity  # Adatta gamma dinamicamente
     return gamma_correction(image, gamma)
 
-def reduce_image(image, scale_factor=0.5):
+def resize_image(image, scale_factor=0.5):
     """
     Riduce le dimensioni dell'immagine applicando un fattore di scala.
 

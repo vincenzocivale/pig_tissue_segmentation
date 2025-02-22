@@ -44,10 +44,10 @@ class ImageSlice:
         collagen_image = pi.load_tif_image(path_collagen)
         autofluorescence_image = pi.load_tif_image(path_autofluorescence)
 
-        self.wga = pi.reduce_image(wga_image, resize_factor)
-        self.collagen = pi.reduce_image(collagen_image, resize_factor)
-        self.autofluorescence = pi.reduce_image(autofluorescence_image, resize_factor)
-        
+        self.wga = pi.resize_image(wga_image, resize_factor)
+        self.collagen = pi.resize_image(collagen_image, resize_factor)
+        self.autofluorescence = pi.resize_image(autofluorescence_image, resize_factor)
+
     def analyse_image(self, predictor=None):
         slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
         os.makedirs(slice_folder, exist_ok=True)
