@@ -1,137 +1,16 @@
 import cv2
 import numpy as np
 from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import supervision as sv
+from skimage.segmentation import mark_boundaries
 
 import sys
 project_home_dir= r"D:\Repositories\pig_tissue_segmentation-main"
 sys.path.append(project_home_dir)
 
-import supervision as sv
-
-
-
-
-def adaptive_thresholding(image, max_value=255, adaptive_method=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                          threshold_type=cv2.THRESH_BINARY, block_size=11, C=2):
-    """
-    Apply adaptive thresholding to an image.
-
-    Parameters:
-      - image: input image (grayscale or color).
-      - max_value: maximum value assigned to pixels exceeding the threshold (default 255).
-      - adaptive_method: adaptive thresholding method; e.g., cv2.ADAPTIVE_THRESH_GAUSSIAN_C or cv2.ADAPTIVE_THRESH_MEAN_C.
-      - threshold_type: threshold type; e.g., cv2.THRESH_BINARY or cv2.THRESH_BINARY_INV.
-      - block_size: block size (must be odd) for local threshold calculation.
-      - C: constant subtracted from the mean or weighted value.
-
-    Returns:
-      - thresholded: binary image obtained by applying adaptive thresholding.
-    """
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-
-    if block_size % 2 == 0:
-        raise ValueError("block_size must be an odd number.")
-
-    thresholded = cv2.adaptiveThreshold(gray, max_value, adaptive_method,
-                                        threshold_type, block_size, C)
-    return thresholded
-
-
-def watershed_segmentation(image, exclusion_mask=None):
-    """
-    Apply watershed segmentation to an image.
-
-    Parameters:
-      - image: input image (grayscale or color).
-      - exclusion_mask: optional mask to exclude certain regions from segmentation.
-
-    Returns:
-      - mask: binary mask obtained by applying watershed segmentation.
-    """
-    # Check if the image is grayscale
-    if len(image.shape) == 2 or image.shape[2] == 1:
-        image_bgr = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    else:
-        image_bgr = image.copy()
-
-    # Convert to grayscale
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-
-    # Apply exclusion mask if provided
-    if exclusion_mask is not None:
-        inclusion_mask = cv2.bitwise_not(exclusion_mask)
-        gray = cv2.bitwise_and(gray, gray, mask=inclusion_mask)
-
-    # Calculate Otsu's threshold only on the included region
-    if exclusion_mask is not None:
-        # Extract pixels in the included region
-        pixels = gray[inclusion_mask != 0]
-        if len(pixels) == 0:
-            return np.zeros_like(gray, dtype=np.uint8)
-        # Manually calculate Otsu's threshold
-        hist, _ = np.histogram(pixels, bins=256, range=(0, 256))
-    else:
-        hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-        hist = hist.ravel()
-
-    total = hist.sum()
-    if total == 0:
-        return np.zeros_like(gray, dtype=np.uint8)
-    
-    # Calculate Otsu's threshold manually
-    sum_total = np.dot(np.arange(256), hist)
-    sum_back = 0
-    weight_back = 0
-    max_var = 0
-    thresh = 0
-
-    for i in range(256):
-        weight_back += hist[i]
-        if weight_back == 0:
-            continue
-        weight_fore = total - weight_back
-        if weight_fore == 0:
-            break
-        sum_back += i * hist[i]
-        mean_back = sum_back / weight_back
-        mean_fore = (sum_total - sum_back) / weight_fore
-        var_between = weight_back * weight_fore * (mean_back - mean_fore)**2
-        if var_between > max_var:
-            max_var = var_between
-            thresh = i
-
-    # Apply threshold
-    _, thresh = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY_INV)
-
-    # Dilate the binary mask to ensure well-defined foreground regions
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    sure_foreground = cv2.dilate(thresh, kernel, iterations=3)
-
-    # Calculate the distance transform
-    dist_transform = cv2.distanceTransform(thresh, cv2.DIST_L2, 5)
-    cv2.normalize(dist_transform, dist_transform, 0, 1.0, cv2.NORM_MINMAX)
-
-    # Threshold the distance transform to identify sure background regions
-    _, sure_background = cv2.threshold(dist_transform, 0.5 * dist_transform.max(), 255, 0)
-    sure_background = sure_background.astype(np.uint8)
-
-    unknown = cv2.subtract(sure_foreground, sure_background)
-
-    # Marker labelling
-    _, markers = cv2.connectedComponents(sure_background)
-    markers += 1
-    markers[unknown == 255] = 0
-
-    # Apply watershed
-    markers = cv2.watershed(image_bgr, markers)
-    mask = np.zeros_like(gray, dtype=np.uint8)
-    mask[markers > 1] = 255
-
-    mask = cv2.bitwise_not(mask)
-    return mask
+import src.data.pre_process_image as pi
 
 
 def calculate_boundy_box(img):
@@ -141,8 +20,8 @@ def calculate_boundy_box(img):
 
     return bounding_box
 
-def segmentation_with_box(predictor, image_path) -> np.ndarray:
-    image_bgr = cv2.imread(image_path)
+def segmentation_with_box(predictor, image_bgr) -> np.ndarray:
+
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
         
     predictor.set_image(image_rgb)
@@ -176,36 +55,6 @@ def annotate_mask_only(image, masks):
         segmented_image = mask_annotator.annotate(scene=image.copy(), detections=detections)
 
         return segmented_image
-
-def double_otsu_thresholding(image):
-    """
-    Apply double Otsu's thresholding to segment the image into
-    background, foreground, and uncertain regions.
-
-    Parameters:
-        image (numpy.ndarray): Grayscale image.
-
-    Returns:
-        tuple: Binary masks for background, foreground, and uncertain regions.
-    """
-    if len(image.shape) > 2 and image.shape[2] == 3:
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        image = image
-    
-    # First Otsu's threshold
-    _, threshold1 = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    # Invert the image for the second Otsu's threshold
-    _, threshold2 = cv2.threshold(255 - image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    # Create masks for background, foreground, and uncertain regions
-    background_mask = (image <= threshold1).astype(np.uint8)
-    foreground_mask = (image > 255 - threshold2).astype(np.uint8)
-    uncertain_mask = ((image > threshold1) & (image <= 255 - threshold2)).astype(np.uint8)
-    
-    return background_mask, foreground_mask, uncertain_mask
-
 
 def apply_otsu_threshold(image_path, mask=None):
     """
@@ -296,102 +145,94 @@ def apply_otsu_threshold(image_path, mask=None):
     return binary_mask
 
 
-def select_foreground_seeds(foreground_mask, num_seeds=1):
+def extract_features(image, segments, mask):
     """
-    Select seed points from the foreground mask.
+    Estrae le feature (intensità, texture, spaziali) dai superpixel nell'area della maschera.
 
-    Parameters:
-        foreground_mask (numpy.ndarray): Binary mask of the foreground region.
-        num_seeds (int): Number of seed points to select.
+    Args:
+        image: Immagine in scala di grigi
+        segments: Mappa dei superpixel
+        mask: Maschera binaria
 
     Returns:
-        list: List of [x, y] coordinates for the selected seed points.
+        features: Lista di feature per ciascun superpixel
+        valid_labels: Etichette valide dei superpixel
     """
-    # Find contours in the foreground mask
-    contours, _ = cv2.findContours(foreground_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    features = []
+    valid_labels = []
     
-    seeds = []
-    for contour in contours:
-        # Calculate the centroid of each contour
-        moments = cv2.moments(contour)
-        if moments['m00'] != 0:
-            cx = int(moments['m10'] / moments['m00'])
-            cy = int(moments['m01'] / moments['m00'])
-            seeds.append([cx, cy])
-    
-    # Sort seed points based on their distance from the image center
-    height, width = foreground_mask.shape
-    center = np.array([width // 2, height // 2])
-    seeds.sort(key=lambda s: np.linalg.norm(np.array(s) - center))
-    
-    # Return the specified number of seed points
-    return np.array(seeds[:num_seeds])
+    for label in np.unique(segments):
+        mask_region = (segments == label) & (mask == 1)
 
-def segmentation_with_seeds(predictor, image) -> np.ndarray:
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
-    predictor.set_image(image)
+        if np.sum(mask_region) > 0:  # Considera solo i superpixel validi
+            intensity = np.mean(image[mask_region])
+            texture = cv2.Laplacian(image, cv2.CV_64F)[mask_region].var()
+            spatial = [np.mean(np.where(mask_region)[0] / image.shape[0]), 
+                       np.mean(np.where(mask_region)[1] / image.shape[1])]
 
-    background_mask, foreground_mask, uncertain_mask = double_otsu_thresholding(image)
+            features.append([intensity, texture, *spatial])
+            valid_labels.append(label)
 
-    # Select seed points for the foreground
-    foreground_seeds = select_foreground_seeds(foreground_mask, num_seeds=10)
+    return features, valid_labels
 
-    masks, scores, logits = predictor.predict(
-    point_coords=foreground_seeds,
-    point_labels= np.ones(foreground_seeds.shape[0]),
-    multimask_output=False,
-    )
-
-    return np.logical_not(masks.astype(bool))
-
-
-def cluster_image(image_path, num_clusters, use_spatial=False, spatial_weight=0.1):
+def perform_clustering(features, segments, n_clusters=2):
     """
-    Segmenta un'immagine in 'num_clusters' cluster utilizzando k-means.
-    
-    Parametri:
-    - image_path: percorso dell'immagine da segmentare.
-    - num_clusters: numero di cluster in cui dividere l'immagine.
-    - use_spatial: se True, le coordinate spaziali vengono aggiunte come feature.
-    - spatial_weight: peso relativo delle coordinate spaziali (utile per bilanciare il contributo del colore).
-    
-    Ritorna:
-    - segmented_image: immagine segmentata in cui ogni pixel assume il colore del suo cluster.
-    """
-    # Carica l'immagine e convertila in RGB
-    image = cv2.imread(image_path)
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    h, w, c = image_rgb.shape
+    Esegue il clustering KMeans sulle feature normalizzate e restituisce una lista di maschere per ciascun cluster.
 
-    # Prepara le feature per il clustering
-    if not use_spatial:
-        # Usa solo le informazioni di colore: reshape in (N, 3)
-        features = image_rgb.reshape((-1, 3))
-        features = np.float32(features)
+    Args:
+        features: Lista di feature estratte
+        segments: Mappa dei superpixel
+        n_clusters: Numero di cluster
+
+    Returns:
+        masks: Lista di maschere (una per ciascun cluster)
+    """
+    # Normalizzazione delle feature
+    scaler = StandardScaler()
+    features_norm = scaler.fit_transform(features)
+    
+    # Esecuzione del clustering KMeans
+    kmeans = KMeans(n_clusters=n_clusters, init='k-means++', n_init=50, random_state=42)
+    kmeans.fit(features_norm)
+    
+    # Etichette dei cluster
+    labels = kmeans.labels_
+
+    # Creazione della lista di maschere per ciascun cluster
+    masks = []
+    for cluster in range(n_clusters):
+        mask = (segments == cluster).astype(np.uint8)  # Crea maschera per ciascun cluster
+        masks.append(mask)
+
+    return masks
+
+
+
+
+def superpixel_clustering_segmentation(gray, mask, segments, n_clusters=2):
+    """
+    Funzione principale per la segmentazione con superpixel e clustering KMeans.
+
+    Args:
+        image_path: Percorso dell'immagine in scala di grigi
+        mask_path: Percorso della maschera binaria
+        segments: Superpixel in cui è stata suddivisa l'immagine
+        n_clusters: Numero di cluster
+
+    Returns:
+      
+    """
+    if len(gray.shape) == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_RGB2GRAY)
     else:
-        # Crea una matrice che includa anche le coordinate spaziali
-        # Normalizza i valori di colore nell'intervallo [0, 1]
-        color_features = image_rgb.reshape((-1, 3)).astype(np.float32) / 255.0
-        # Crea una meshgrid delle coordinate (x, y)
-        X, Y = np.meshgrid(np.arange(w), np.arange(h))
-        X = X.reshape((-1, 1)).astype(np.float32) / w  # normalizzazione
-        Y = Y.reshape((-1, 1)).astype(np.float32) / h  # normalizzazione
-        # Concatena le feature di colore con quelle spaziali (eventualmente pesate)
-        features = np.concatenate((color_features, spatial_weight * X, spatial_weight * Y), axis=1)
+        gray = gray
 
-    # Applica il clustering k-means
-    kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-    labels = kmeans.fit_predict(features)
-
-    # Estrai i centroidi e ricostruisci l'immagine segmentata
-    if not use_spatial:
-        centers = np.uint8(kmeans.cluster_centers_)
+    if len(mask.shape) == 3:
+        mask = cv2.cvtColor(mask, cv2.COLOR_RGB2GRAY)
     else:
-        # Se abbiamo aggiunto le coordinate, consideriamo solo le prime 3 colonne per il colore
-        centers = (kmeans.cluster_centers_[:, :3] * 255).astype(np.uint8)
+        mask = mask
 
-    segmented_data = centers[labels.flatten()]
-    segmented_image = segmented_data.reshape(image_rgb.shape)
-
-    return segmented_image
+    features, valid_labels = extract_features(gray, segments, mask)
+    masks = perform_clustering(features, segments, n_clusters)
+    
+    return masks

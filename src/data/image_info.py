@@ -8,6 +8,7 @@ import supervision as sv
 import src.data.pre_process_image as pi
 import src.models.segmentation as seg
 import src.data.post_process_image as post
+import src.visualization.visualize as vis
 
 class ImageSlice:
     """
@@ -16,16 +17,20 @@ class ImageSlice:
       - collagen: collagen image
       - autofluorescence: autofluorescence image
     """
-    def __init__(self, slice_id, path_wga, path_collagen, path_autofluorescence, output_folder=r"C:\Users\cical\Documents\GitHub\Repositories\pig_tissue_segmentation\data\processed"):
+    def __init__(self, slice_id, output_folder=r"..\data"):
+
         self.slice_id = slice_id
-        self.path_wga = path_wga
-        self.path_collagen = path_collagen
-        self.path_autofluorescence = path_autofluorescence
         self.output_folder = output_folder
+
+        self.wga = None
+        self.collagen = None
+        self.autofluorescence = None
         
         self.preprocessed_wga = None
         self.preprocessed_collagen = None
         self.preprocessed_auto = None
+
+        self.superpixel_segments = None
 
         self.segmented_tissue = None
         self.segmented_cardios = None
@@ -35,68 +40,55 @@ class ImageSlice:
         self.cardios_contours = None
         self.collagen_contours = None
 
+    def load_images(self, path_wga, path_collagen, path_autofluorescence):
+        self.wga = pi.load_tif_image(path_wga)
+        self.collagen = pi.load_tif_image(path_collagen)
+        self.autofluorescence = pi.load_tif_image(path_autofluorescence)
+
     def analyse_image(self, predictor=None):
         slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
         os.makedirs(slice_folder, exist_ok=True)
 
         # Use the image of collagen to segment the tissue external contour
-        self.preprocessed_collagen = pi.enhance_image(self.path_collagen)
-        processed_collagen_path = os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_collagen.png")
-        cv2.imwrite(processed_collagen_path, self.preprocessed_collagen)
-
-        #tissue_mask = seg.segmentation_with_box(predictor,processed_collagen_path)
-        tissue_mask = seg.cluster_image(processed_collagen_path)
-        #self.segmented_tissue= seg.annotate_mask_only(self.preprocessed_collagen, tissue_mask)
-        self.segmented_tissue = tissue_mask
+        self.preprocessed_collagen = pi.enhance_image(self.collagen)
+        self.segmented_tissue = seg.segmentation_with_box(self.preprocessed_collagen)
 
         # Apply mask of tissue region to the autofluorescence image and the execute pre processing
-        self.preprocessed_auto = pi.enhance_image(self.path_autofluorescence, tissue_mask)
-        preprocessed_auto_path = os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_auto.png")
-        cv2.imwrite(preprocessed_auto_path, self.preprocessed_auto)
+        self.preprocessed_auto = pi.enhance_image(self.autofluorescence, self.segmented_tissue)
+        self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
 
-        #cardio_mask = seg.segmentation_with_box(predictor, preprocessed_auto_path)
-        cardio_mask = seg.cluster_image(preprocessed_auto_path, tissue_mask)
-        #self.segmented_cardios= seg.annotate_mask_only(self.preprocessed_collagen, cardio_mask)
-        self.segmented_cardios = cardio_mask
+        masks_unsupervised = seg.superpixel_clustering_segmentation(self.superpixel_segments, self.preprocessed_auto)
 
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
-       
-        # DA MODIFICARE
-        self.segmented_collagen = self.segmented_cardios
-
-        #self._save_results()
-
-
+        # unsupervised segmentation, so I don't know which is collagen and which is cardios
+        self.segmented_cardios = masks_unsupervised[0]
+        self.segmented_collagen = masks_unsupervised[1]
 
     def _postprocess(self):
         self.tissue_contours = post.extract_smoothed_contours(self.segmented_tissue)
         self.cardios_contours = post.extract_smoothed_contours(self.segmented_cardios)
         self.collagen_contours = post.extract_smoothed_contours(self.segmented_collagen)
 
-    def _save_results(self):
+    def save_results(self):
         if not os.path.isdir(self.output_folder):
             raise  FileNotFoundError(f"Error: The folder to save result '{self.output_folder}' does not exist.")
         
-        slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
-        os.makedirs(slice_folder, exist_ok=True)
+        # saving interim data
+        slice_interim_folder = os.path.join(self.output_folder, "interim", f"slice_{self.slice_id}")
+        os.makedirs(slice_interim_folder, exist_ok=True)
 
-        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_wga.png"), self.preprocessed_wga)
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_preprocessed_auto.png"), self.preprocessed_auto)
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_auto.png"), self.preprocessed_auto)
 
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
-        cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_superpixel_segments.png"), vis.visualize_superpixels_with_boundaries(self.preprocessed_auto, self.superpixel_segments))
 
-        # # Create an image with contours
-        # contours_tissue = post.draw_dashed_contours(self.preprocessed_auto, self.tissue_contours, color=(0, 255, 0))
-        # contours_cardios = post.draw_dashed_contours(self.preprocessed_auto, self.cardios_contours, color=(0, 0, 255))
-        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours_tissue.png"), contours_tissue)
-        # cv2.imwrite(os.path.join(slice_folder, f"slice_{self.slice_id}_contours_cardios.png"), contours_cardios)
-    
-    # def analyse_image(self):
-    #     self._preprocess()
-    #     self._segment_image()
-    #     self._postprocess()
-    #     self._save_results()
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_cardios.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_cardios))
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_collagen.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_collagen))
+
+        # saving final results
+        slice_processed_folder = os.path.join(self.output_folder, "processed", f"slice_{self.slice_id}")
+        os.makedirs(slice_processed_folder, exist_ok=True)
+
+        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
+        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
+        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)

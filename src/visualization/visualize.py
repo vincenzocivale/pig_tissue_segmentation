@@ -1,33 +1,48 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import ipywidgets as widgets
-from IPython.display import display
-from PIL import Image
 import cv2
+from skimage.segmentation import mark_boundaries
 
 
-# Funzione per caricare l'immagine
-def load_image(image_path):
-    img = Image.open(image_path).convert('L')  # Convertiamo in scala di grigi
-    img = img.resize((img.width // 2, img.height // 2)) 
-    return np.array(img)
+def overlay_cluster_mask(image, cluster_map, cluster_index, color=(255, 0, 0), alpha=0.5):
+    """
+    Sovrappone la maschera di un singolo cluster sull'immagine originale.
 
+    Args:
+        image: Immagine in scala di grigi
+        cluster_map: Mappa dei cluster
+        cluster_index: Indice del cluster di cui si vuole sovrapporre la maschera
+        color: Colore (in formato RGB) per evidenziare il cluster (default rosso)
+        alpha: Opacità della sovrapposizione (0 è trasparente, 1 è opaco)
 
+    Returns:
+        overlayed_image: Immagine con la maschera del cluster sovrapposta
+    """
+    # Crea una maschera per il cluster specificato
+    cluster_mask = (cluster_map == cluster_index).astype(np.uint8)
 
-# Funzione per plottare l'istogramma dell'immagine
-def plot_histogram(image_array):
-    plt.figure()
-    plt.hist(image_array.ravel(), bins=256, range=(0, 256), density=True)
-    plt.title('Histogram')
-    plt.xlabel('Pixel intensity')
-    plt.ylabel('Frequency')
-    plt.show()
+    # Converti l'immagine originale in un formato a 3 canali per poter sovrapporre il colore
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
-# Funzione per plottare l'immagine e attendere la chiusura della finestra
-def plot_image(image_array):
-        plt.figure()
-        plt.imshow(image_array, cmap='gray')
-        plt.title('Image')
-        plt.axis('off')
-        plt.show(block=True)
+    # Crea un'immagine di sovrapposizione con il colore del cluster
+    overlay = np.zeros_like(image_rgb)
+    overlay[cluster_mask == 1] = color  # Applica il colore solo ai pixel del cluster
+
+    # Sovrapponi la maschera all'immagine originale, regolando l'opacità
+    overlayed_image = cv2.addWeighted(image_rgb, 1 - alpha, overlay, alpha, 0)
+
+    return overlayed_image
+
+def visualize_superpixels_with_boundaries(image, segments):
+    """
+    Visualizza i superpixel sull'immagine originale, mostrando i bordi dei superpixel.
+
+    Args:
+        image: Immagine in scala di grigi
+        segments: Mappa dei superpixel
+
+    Returns:
+        superpixel_viz: Immagine con i bordi dei superpixel
+    """
+    return mark_boundaries(cv2.cvtColor(image, cv2.COLOR_GRAY2RGB), segments, mode='thick')
+
 

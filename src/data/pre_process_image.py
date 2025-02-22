@@ -1,6 +1,8 @@
 from PIL import Image
 import numpy as np
 import cv2
+from skimage.segmentation import slic
+
 Image.MAX_IMAGE_PIXELS = None
 
 def load_tif_image(image_path):
@@ -25,14 +27,24 @@ def reduce_resolution(image, scale_percent):
     return cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
 
 def apply_mask(image, mask):
-    mask = (mask > 0).astype(np.uint8) * 255
+    # Converti la maschera in binaria e in uint8
+    mask = (mask > 0).astype(np.uint8)
+    
+    # Se la maschera ha un canale extra, rimuovilo
+    if mask.ndim > 2:
+        mask = np.squeeze(mask)
+    
+    # Converte in immagine binaria (0 e 255)
+    mask = mask * 255
 
-    if len(image.shape) == 2:
-        masked_image = cv2.bitwise_and(image, image, mask=mask)
-    else:
-        masked_image = cv2.bitwise_and(image, image, mask=mask)
-
+    # Assicurati che la maschera abbia le stesse dimensioni (H, W) dell'immagine
+    if mask.shape != image.shape[:2]:
+        mask = cv2.resize(mask, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
+    
+    # Applica la maschera
+    masked_image = cv2.bitwise_and(image, image, mask=mask)
     return masked_image
+
 
 
 
@@ -117,8 +129,7 @@ def adaptive_gamma_correction(image, alpha=0.5, beta=1.5):
 
 
 
-def enhance_image(img_path, mask=None, reference=None):
-    image = load_tif_image(img_path)
+def enhance_image(image, mask=None, reference=None):
 
     if len(image.shape) == 3:
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -142,9 +153,18 @@ def enhance_image(img_path, mask=None, reference=None):
 
     return image_gray
 
-# load_mask = np.load(r"C:\Users\cical\Downloads\mask.npy")
-# mask = load_mask[0]
-# mask = np.logical_not(mask.astype(bool)).astype(np.uint8) * 255
-# cv2.imwrite(r"C:\Users\cical\Downloads\mask.png", mask)
-# enhanced_image = enhance_image(r"C:\Users\cical\Documents\GitHub\Repositories\pig_tissue_segmentation\data\raw\BZ5_BZ5_CH1_AUTO_MIP.tif", mask)
-# cv2.imwrite(r"C:\Users\cical\Downloads\enhanced_image.png", enhanced_image)
+def generate_superpixels(image, mask, n_superpixels=500):
+    """
+    Genera superpixel nell'immagine limitata dalla maschera.
+
+    Args:
+        image: Immagine in scala di grigi
+        mask: Maschera binaria
+        n_superpixels: Numero di superpixel da generare
+
+    Returns:
+        segments: Mappa di superpixel
+    """
+    gray_3ch = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    segments = slic(gray_3ch, n_segments=n_superpixels, compactness=5, sigma=2, start_label=1, mask=mask)
+    return segments
