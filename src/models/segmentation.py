@@ -7,6 +7,8 @@ import supervision as sv
 from skimage.segmentation import mark_boundaries
 from skimage import graph
 from skimage.filters import gaussian
+from skimage import filters
+from skimage.segmentation import mark_boundaries
 
 
 import src.data.pre_process_image as pi
@@ -158,7 +160,7 @@ def perform_clustering(features, segments, n_clusters=2):
     return masks
 
 
-def superpixel_clustering_segmentation(gray, mask, segments, n_clusters=2):
+def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
     """
     Funzione principale per la segmentazione con superpixel e clustering KMeans.
 

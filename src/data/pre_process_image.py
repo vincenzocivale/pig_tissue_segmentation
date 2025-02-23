@@ -140,7 +140,7 @@ def resize_image(image, scale_factor=0.5):
     return image_resized.astype(image.dtype)  # Mantiene il tipo originale
 
 
-def enhance_image(image, scale_factor=0.5, mask=None, reference=None):
+def enhance_image(image, mask=None, reference=None):
     if len(image.shape) == 3:
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
@@ -164,7 +164,16 @@ def enhance_image(image, scale_factor=0.5, mask=None, reference=None):
     if mask is not None:
         image_gray = image_gray * mask_bin
 
-    return image_gray
+    # Applica CLAHE per migliorare il contrasto locale
+    image_gray = apply_CLAHE(image_gray)
+
+    # Applica filtro Sobel per enfatizzare i bordi
+    image_edges = apply_sobel(image_gray)
+
+    # Combina l'immagine originale con i bordi per enfatizzare il foreground
+    enhanced_image = cv2.addWeighted(image_gray, 0.8, image_edges, 0.2, 0)
+
+    return enhanced_image
 
 
 def generate_superpixels(image, mask, n_superpixels=300):
