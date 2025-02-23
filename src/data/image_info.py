@@ -4,6 +4,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import supervision as sv
+from skimage.segmentation import mark_boundaries
 
 import src.data.pre_process_image as pi
 import src.models.segmentation as seg
@@ -17,7 +18,7 @@ class ImageSlice:
       - collagen: collagen image
       - autofluorescence: autofluorescence image
     """
-    def __init__(self, slice_id, output_folder=r"..\data"):
+    def __init__(self, slice_id, output_folder=r"C:\Users\cical\Documents\GitHub\Repositories\pig_tissue_segmentation\data"):
 
         self.slice_id = slice_id
         self.output_folder = output_folder
@@ -63,12 +64,10 @@ class ImageSlice:
         masks_unsupervised = seg.superpixel_clustering_segmentation(self.preprocessed_auto, mask=self.segmented_tissue , segments=self.superpixel_segments)
 
         # unsupervised segmentation, so I don't know which is collagen and which is cardios
-        self.segmented_cardios = masks_unsupervised[0]
-        self.segmented_collagen = masks_unsupervised[1]
+        self.segmented_cardios = seg.superpixel_clustering_segmentation(self.preprocessed_auto, segments=self.superpixel_segments)
+        self.segmented_collagen = self.segmented_cardios
     
     def analyse_image2(self, mask_path):
-        slice_folder = os.path.join(self.output_folder, f"slice_{self.slice_id}")
-        os.makedirs(slice_folder, exist_ok=True)
 
         # Load the binary mask for tissue segmentation
         self.segmented_tissue = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
@@ -77,11 +76,10 @@ class ImageSlice:
         self.preprocessed_auto = pi.enhance_image(self.autofluorescence, self.segmented_tissue)
         self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
 
-        masks_unsupervised = seg.superpixel_clustering_segmentation(self.preprocessed_auto, segments=self.superpixel_segments)
-
         # unsupervised segmentation, so I don't know which is collagen and which is cardios
-        self.segmented_cardios = masks_unsupervised[0]
-        self.segmented_collagen = masks_unsupervised[1]
+        self.segmented_cardios = seg.superpixel_clustering_segmentation(self.preprocessed_auto, segments=self.superpixel_segments)
+
+        self.segmented_collagen = self.segmented_cardios
 
     def _postprocess(self):
         self.tissue_contours = post.extract_smoothed_contours(self.segmented_tissue)
@@ -99,8 +97,8 @@ class ImageSlice:
         #cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
         cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_auto.png"), self.preprocessed_auto)
 
-        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_superpixel_segments.png"), vis.visualize_superpixels_with_boundaries(self.preprocessed_auto, self.superpixel_segments))
-
+        superpixel_viz = mark_boundaries(cv2.cvtColor(self.preprocessed_auto, cv2.COLOR_GRAY2RGB), self.superpixel_segments, mode='thick')
+        plt.imsave(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_superpixel_viz.png"), superpixel_viz)
         
         # cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_cardios.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_cardios))
         # cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_collagen.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_collagen))
@@ -112,3 +110,5 @@ class ImageSlice:
         cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
         cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
         cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)
+        print(f"Results for slice {self.slice_id} saved in {slice_processed_folder}")
+

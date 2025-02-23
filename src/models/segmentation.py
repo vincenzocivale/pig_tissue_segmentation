@@ -175,7 +175,7 @@ def create_binary_cluster_mask(segments, labels, threshold=0):
     # Creare la maschera binaria (con un threshold)
     binary_mask = (cluster_map == threshold).astype(np.uint8)
 
-    return binary_mask
+    return (binary_mask * 255).astype('uint8')
 
 
 def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
@@ -201,7 +201,7 @@ def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
     labels = perform_clustering(features, segments, n_clusters)
     
     mask = create_binary_cluster_mask(segments, labels, 0)
-    
+
     return mask
 
 
