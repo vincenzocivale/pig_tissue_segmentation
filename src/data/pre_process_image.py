@@ -9,7 +9,13 @@ Image.MAX_IMAGE_PIXELS = None
 def load_tif_image(image_path):
     with Image.open(image_path) as img:
         image_array = np.array(img)
+    
+    # Normalizza se necessario
+    if image_array.dtype != np.uint8:
+        image_array = (255 * (image_array / image_array.max())).astype(np.uint8)
+    
     return image_array
+
 
 def apply_CLAHE(image, clipLimit=2.0, tileGridSize=(8,8)):
     clahe = cv2.createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
@@ -125,56 +131,43 @@ def adaptive_gamma_correction(image, alpha=0.5, beta=1.5):
     return gamma_correction(image, gamma)
 
 def resize_image(image, scale_factor=0.5):
-    """
-    Riduce le dimensioni dell'immagine applicando un fattore di scala.
-
-    Parameters:
-        image (ndarray): Immagine di input (ad es. caricata con skimage.io.imread).
-        scale_factor (float): Fattore di scala per la riduzione.
-                              Ad esempio, 0.5 riduce l'immagine alla metà della dimensione originale.
-
-    Returns:
-        ndarray: Immagine ridimensionata.
-    """
-    # Calcola le nuove dimensioni
     new_rows = int(image.shape[0] * scale_factor)
     new_cols = int(image.shape[1] * scale_factor)
 
-    # Ridimensiona l'immagine
-    image_resized = transform.resize(image, (new_rows, new_cols), anti_aliasing=True)
+    # Ridimensiona mantenendo il range dei valori originali
+    image_resized = transform.resize(image, (new_rows, new_cols), anti_aliasing=True, preserve_range=True)
 
-    # Se l'immagine originale era in formato uint8, riconvertiamo il risultato in uint8
-    if image.dtype == np.uint8:
-        image_resized = (image_resized * 255).astype(np.uint8)
+    return image_resized.astype(image.dtype)  # Mantiene il tipo originale
 
-    return image_resized
 
-def enhance_image(image, scale_factor = 0.5,mask=None, reference=None):
-
+def enhance_image(image, scale_factor=0.5, mask=None, reference=None):
     if len(image.shape) == 3:
         image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         image_gray = image
 
+    if mask is not None:
+        mask_bin = mask > 0  # Binaria
 
-    # Step 1: Aumenta il contrasto con histogram stretching
-    image_gray = histogram_stretching(image_gray)
+    # Histogram stretching solo dove necessario
+    image_gray = histogram_stretching(image_gray) if mask is None else histogram_stretching(image_gray * mask_bin)
 
-    # Step 2: Applica Adaptive Gamma Correction
+    # Adaptive Gamma Correction
     image_gray = adaptive_gamma_correction(image_gray)
 
-    # Step 3: Se c'è un'immagine di riferimento, esegui histogram specification
+    # Histogram Specification solo se presente un riferimento
     if reference is not None:
         ref_gray = cv2.cvtColor(reference, cv2.COLOR_RGB2GRAY) if len(reference.shape) == 3 else reference
         image_gray = histogram_specification(image_gray, ref_gray)
 
-    # Step 4: Se è presente una maschera, applicala
+    # Applica la maschera per evitare alterazioni fuori dalla regione di interesse
     if mask is not None:
-        image_gray = apply_mask(image_gray, mask)
+        image_gray = image_gray * mask_bin
 
     return image_gray
 
-def generate_superpixels(image, mask, n_superpixels=500):
+
+def generate_superpixels(image, mask, n_superpixels=300):
     """
     Genera superpixel nell'immagine limitata dalla maschera.
 
@@ -186,6 +179,7 @@ def generate_superpixels(image, mask, n_superpixels=500):
     Returns:
         segments: Mappa di superpixel
     """
+    mask_bool = mask > 0  # Converti in booleano
     gray_3ch = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    segments = slic(gray_3ch, n_segments=n_superpixels, compactness=5, sigma=2, start_label=1, mask=mask)
+    segments = slic(gray_3ch, n_segments=n_superpixels, compactness=2, sigma=2, start_label=1, mask=mask_bool)
     return segments

@@ -96,14 +96,14 @@ class ImageSlice:
         slice_interim_folder = os.path.join(self.output_folder, "interim", f"slice_{self.slice_id}")
         os.makedirs(slice_interim_folder, exist_ok=True)
 
-        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
+        #cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
         cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_auto.png"), self.preprocessed_auto)
 
         cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_superpixel_segments.png"), vis.visualize_superpixels_with_boundaries(self.preprocessed_auto, self.superpixel_segments))
 
-        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
-        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_cardios.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_cardios))
-        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_collagen.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_collagen))
+        
+        # cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_cardios.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_cardios))
+        # cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_collagen.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_collagen))
 
         # saving final results
         slice_processed_folder = os.path.join(self.output_folder, "processed", f"slice_{self.slice_id}")
