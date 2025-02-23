@@ -145,19 +145,37 @@ def perform_clustering(features, segments, n_clusters=2):
     features_norm = scaler.fit_transform(features)
     
     # Esecuzione del clustering KMeans
-    kmeans = KMeans(n_clusters=n_clusters, init='k-means++', n_init=50, random_state=42)
+    kmeans = KMeans(n_clusters=n_clusters, init='k-means++', n_init=30, random_state=42)
     kmeans.fit(features_norm)
     
     # Etichette dei cluster
     labels = kmeans.labels_
 
-    # Creazione della lista di maschere per ciascun cluster
-    masks = []
-    for cluster in range(n_clusters):
-        mask = (segments == cluster).astype(np.uint8)  # Crea maschera per ciascun cluster
-        masks.append(mask)
+    return labels
 
-    return masks
+def create_binary_cluster_mask(segments, labels, threshold=0):
+    """
+    Crea una maschera binaria per l'immagine basata sui cluster.
+
+    Args:
+        segments: Mappa dei superpixel
+        labels: Etichette dei cluster ottenute da un algoritmo di clustering
+        threshold: La soglia per determinare quale cluster è 1 (incluso), tutti gli altri sono 0
+
+    Returns:
+        binary_mask: Immagine binaria risultante (1 per un cluster e 0 per gli altri)
+    """
+    # Creazione della mappa dei cluster (0 o 1 in base alla soglia)
+    cluster_map = np.zeros_like(segments)
+    
+    # Assegna ai superpixel il valore del cluster corrispondente
+    for label, cluster in zip(np.unique(segments), labels):
+        cluster_map[segments == label] = cluster
+    
+    # Creare la maschera binaria (con un threshold)
+    binary_mask = (cluster_map == threshold).astype(np.uint8)
+
+    return binary_mask
 
 
 def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
@@ -180,9 +198,11 @@ def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
 
 
     features = extract_features(gray, segments)
-    masks = perform_clustering(features, segments, n_clusters)
+    labels = perform_clustering(features, segments, n_clusters)
     
-    return masks
+    mask = create_binary_cluster_mask(segments, labels, 0)
+    
+    return mask
 
 
 def compute_rag(image, segments):
