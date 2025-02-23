@@ -45,4 +45,42 @@ def visualize_superpixels_with_boundaries(image, segments):
     """
     return mark_boundaries(cv2.cvtColor(image, cv2.COLOR_GRAY2RGB), segments, mode='thick')
 
+def overlay_contours(image, contours, thickness=2):
+    """
+    Sovrappone i contorni sull'immagine, ognuno con un colore specifico.
+    
+    Args:
+        image (ndarray): Immagine RGB o scala di grigi.
+        contours (list): Lista di contorni (ogni contorno è un array numpy con shape (N,1,2)).
+        thickness (int): Spessore intero dei contorni (default: 2).
+    
+    Returns:
+        ndarray: Immagine con contorni sovrapposti.
+    """
+    # Conversione a immagine RGB se in scala di grigi
+    if len(image.shape) == 2:
+        overlay_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+    else:
+        overlay_image = image.copy()
+    
+    # Tavolozza di colori
+    colors = [
+        (255, 0, 0),   # Rosso
+        (0, 255, 0),   # Verde
+        (0, 0, 255),   # Blu
+        (255, 255, 0), # Giallo
+        (0, 255, 255), # Ciano
+        (255, 0, 255), # Magenta
+    ]
+    
+    # Disegna ogni contorno
+    for i, cnt in enumerate(contours):
+        # Converti il contorno al formato richiesto da OpenCV se necessario
+        if not isinstance(cnt, np.ndarray):
+            cnt = np.array(cnt, dtype=np.int32).reshape((-1,1,2))
+        color = colors[i % len(colors)]
+        cv2.drawContours(overlay_image, [cnt], contourIdx=-1, color=color, thickness=int(thickness))
+    
+    return overlay_image
+
 

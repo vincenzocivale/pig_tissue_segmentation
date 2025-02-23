@@ -178,7 +178,7 @@ def create_binary_cluster_mask(segments, labels, threshold=0):
     return (binary_mask * 255).astype('uint8')
 
 
-def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
+def superpixel_clustering_segmentation(gray,  segments, tissue_mask, n_clusters=2):
     """
     Funzione principale per la segmentazione con superpixel e clustering KMeans.
 
@@ -202,6 +202,8 @@ def superpixel_clustering_segmentation(gray,  segments, n_clusters=2):
     
     mask = create_binary_cluster_mask(segments, labels, 0)
 
+    # Assicura che le zone nere della maschera del tessuto rimangano nere nella maschera finale
+    mask[tissue_mask == 0] = 0
     return mask
 
 

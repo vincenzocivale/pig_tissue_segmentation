@@ -37,6 +37,9 @@ class ImageSlice:
         self.segmented_cardios = None
         self.segmented_collagen = None
 
+        self.segmented_tissue_post = None
+        self.segmented_cardios_post = None
+
         self.external_contours = None
         self.internal_contours = None
 
@@ -77,14 +80,13 @@ class ImageSlice:
         self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
 
         # unsupervised segmentation, so I don't know which is collagen and which is cardios
-        self.segmented_cardios = seg.superpixel_clustering_segmentation(self.preprocessed_auto, segments=self.superpixel_segments)
+        self.segmented_cardios = seg.superpixel_clustering_segmentation(self.preprocessed_auto, segments=self.superpixel_segments, tissue_mask=self.segmented_tissue)
 
         self.segmented_collagen = self.segmented_cardios
 
-    def _postprocess(self):
-        self.tissue_contours = post.extract_smoothed_contours(self.segmented_tissue)
-        self.cardios_contours = post.extract_smoothed_contours(self.segmented_cardios)
-        self.collagen_contours = post.extract_smoothed_contours(self.segmented_collagen)
+        self.segmented_tissue_post, self.external_contours = post.postprocess_mask(self.segmented_tissue)
+        self.segmented_cardios_post, self.internal_contours = post.postprocess_mask(self.segmented_cardios)
+
 
     def save_results(self):
         if not os.path.isdir(self.output_folder):
@@ -94,21 +96,23 @@ class ImageSlice:
         slice_interim_folder = os.path.join(self.output_folder, "interim", f"slice_{self.slice_id}")
         os.makedirs(slice_interim_folder, exist_ok=True)
 
-        #cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_collagen.png"), self.preprocessed_collagen)
         cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_preprocessed_auto.png"), self.preprocessed_auto)
 
         superpixel_viz = mark_boundaries(cv2.cvtColor(self.preprocessed_auto, cv2.COLOR_GRAY2RGB), self.superpixel_segments, mode='thick')
         plt.imsave(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_superpixel_viz.png"), superpixel_viz)
-        
-        # cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_cardios.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_cardios))
-        # cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_collagen.png"), vis.overlay_cluster_mask(self.preprocessed_auto, self.segmented_collagen))
 
-        # saving final results
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_tissue_interim.png"), self.segmented_tissue)
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_cardios_interim.png"), self.segmented_cardios)
+        cv2.imwrite(os.path.join(slice_interim_folder, f"slice_{self.slice_id}_segmented_collagen_interim.png"), self.segmented_collagen)
+
+         # saving final results
         slice_processed_folder = os.path.join(self.output_folder, "processed", f"slice_{self.slice_id}")
         os.makedirs(slice_processed_folder, exist_ok=True)
 
-        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue)
-        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios)
-        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_collagen.png"), self.segmented_collagen)
-        print(f"Results for slice {self.slice_id} saved in {slice_processed_folder}")
+        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_tissue.png"), self.segmented_tissue_post)
+        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_cardios.png"), self.segmented_cardios_post)
+
+        overlayed_image = vis.overlay_contours(self.preprocessed_auto, self.external_contours + self.internal_contours)
+        cv2.imwrite(os.path.join(slice_processed_folder, f"slice_{self.slice_id}_segmented_tissue_overlay.png"), overlayed_image)
+        
 
