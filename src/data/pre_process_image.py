@@ -190,5 +190,5 @@ def generate_superpixels(image, mask, n_superpixels=300):
     """
     mask_bool = mask > 0  # Converti in booleano
     gray_3ch = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    segments = slic(gray_3ch, n_segments=n_superpixels, compactness=2, sigma=2, start_label=1, mask=mask_bool)
+    segments = slic(gray_3ch, n_segments=n_superpixels, compactness=6, sigma=2, start_label=1, mask=mask_bool)
     return segments
