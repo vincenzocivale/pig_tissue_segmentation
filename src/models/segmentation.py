@@ -9,6 +9,8 @@ from skimage import graph
 from skimage.filters import gaussian
 from skimage import filters
 from skimage.segmentation import mark_boundaries
+from skimage.filters import threshold_otsu
+
 
 
 import src.data.pre_process_image as pi
@@ -309,3 +311,43 @@ def superpixel_rag_segmentation(image, mask, segments, similarity_threshold=0.1,
     superpixel_viz = mark_boundaries(cv2.cvtColor(image, cv2.COLOR_GRAY2RGB), segments, mode='thick')
     
     return superpixel_viz, segmented_viz
+
+def superpixel_otsu_segmentation(gray, segments, tissue_mask):
+    """
+    Segmentazione con Superpixel e soglia di Otsu.
+
+    Args:
+        gray: Immagine in scala di grigi (numpy array)
+        segments: Matrice dei superpixel (numpy array con stessi dimensioni di gray)
+        tissue_mask: Maschera binaria del tessuto (numpy array con stessi dimensioni di gray)
+
+    Returns:
+        Maschera binaria segmentata (numpy array)
+    """
+
+    # Se l'immagine è a colori, convertirla in scala di grigi
+    if len(gray.shape) == 3:
+        gray = cv2.cvtColor(gray, cv2.COLOR_RGB2GRAY)
+
+    # Inizializza la maschera binaria finale
+    mask = np.zeros_like(gray, dtype=np.uint8)
+
+    # Ottiene il numero di superpixel
+    num_segments = np.max(segments) + 1
+
+    for seg_val in range(num_segments):
+        # Estrai i pixel appartenenti al superpixel corrente
+        segment_mask = (segments == seg_val)
+        segment_pixels = gray[segment_mask]
+
+        if len(segment_pixels) > 0:
+            # Applica la soglia di Otsu solo sui pixel del superpixel
+            threshold = threshold_otsu(segment_pixels)
+
+            # Crea una maschera binaria per il superpixel in base alla soglia
+            mask[segment_mask] = (segment_pixels > threshold).astype(np.uint8) * 255
+
+    # Mantieni solo le zone del tessuto
+    mask[tissue_mask == 0] = 0
+
+    return mask
