@@ -76,7 +76,7 @@ class ImageSlice:
         self.segmented_tissue = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         
         # Apply mask of tissue region to the autofluorescence image and then execute pre-processing
-        self.preprocessed_auto = pi.enhance_image(self.autofluorescence, self.segmented_tissue)
+        self.preprocessed_auto = pi.enhance_image2(self.autofluorescence, self.segmented_tissue)
         self.superpixel_segments = pi.generate_superpixels(self.preprocessed_auto, self.segmented_tissue)
 
         # unsupervised segmentation, so I don't know which is collagen and which is cardios

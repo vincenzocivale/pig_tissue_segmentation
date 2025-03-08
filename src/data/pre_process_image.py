@@ -192,3 +192,92 @@ def generate_superpixels(image, mask, n_superpixels=300):
     gray_3ch = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     segments = slic(gray_3ch, n_segments=n_superpixels, compactness=6, sigma=2, start_label=1, mask=mask_bool)
     return segments
+
+def enhance_image2(image, mask=None, reference=None):
+    if len(image.shape) == 3:
+        image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        image_gray = image
+
+    image_gray = auto_contrast_adjust(image_gray)
+    image_gray = cv2.GaussianBlur(image_gray, (0, 0), sigmaX=10, sigmaY=10)
+
+    return image_gray
+
+
+def auto_contrast_adjust(im):
+    """
+    Applies auto contrast adjustment on an image.
+    """
+    im_type = im.dtype
+    # Minimum and maximum of the image
+    im_min = np.min(im)
+    im_max = np.max(im)
+
+    # Convert to grayscale if the image is color
+    if len(im.shape) == 3 and im.shape[2] == 3:
+        im = 0.3 * im[:,:,2] + 0.59 * im[:,:,1] + 0.11 * im[:,:,0]
+        im = im.astype(im_type)
+
+    # Histogram computation
+    if im_type == np.uint8:
+        hist_min = 0
+        hist_max = 256
+    elif im_type in (np.uint16, np.int32):
+        hist_min = im_min
+        hist_max = im_max
+    else:
+        raise NotImplementedError(f"Not implemented for dtype {im_type}")
+
+    histogram = np.histogram(im, bins=256, range=(hist_min, hist_max))[0]
+    bin_size = (hist_max - hist_min) / 256
+
+    # Various algorithm parameters
+    h, w = im.shape[:2]
+    pixel_count = h * w
+    limit = pixel_count / 10
+    const_auto_threshold = 5000
+    auto_threshold = 0
+
+    auto_threshold = const_auto_threshold if auto_threshold <= 10 else auto_threshold / 2
+    threshold = int(pixel_count / auto_threshold)
+
+    # Set the output min bin
+    i = -1
+    found = False
+    while not found and i <= 255:
+        i += 1
+        count = histogram[i]
+        if count > limit:
+            count = 0
+        found = count > threshold
+    hmin = i
+    found = False
+
+    # Set the output max bin
+    i = 256
+    while not found and i > 0:
+        i -= 1
+        count = histogram[i]
+        if count > limit:
+            count = 0
+        found = count > threshold
+    hmax = i
+
+    # Compute output min and max pixel values from the output min and max bins
+    if hmax >= hmin:
+        min_ = hist_min + hmin * bin_size
+        max_ = hist_min + hmax * bin_size
+        if min_ == max_:
+            min_ = hist_min
+            max_ = hist_max
+    else:
+        min_ = hist_min
+        max_ = hist_max
+
+    # Apply the contrast
+    imr = (im - min_) / (max_ - min_) * 255
+
+    return imr.astype(im_type)
+
+
